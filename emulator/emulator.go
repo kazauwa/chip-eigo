@@ -14,6 +14,11 @@ func check(err error) {
 	}
 }
 
+const (
+	fontOffset             = 0x050
+	defaultFontSpriteWidth = 5
+)
+
 var font = [...]byte{
 	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
 	0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -59,7 +64,6 @@ type Chip8 struct {
 }
 
 func (chip8 *Chip8) loadFont() {
-	fontOffset := 0x050
 	for offset, element := range font {
 		chip8.memory[fontOffset+offset] = element
 	}
@@ -258,14 +262,52 @@ func (chip8 *Chip8) decode(rawInstruction uint16) {
 	case 0xF:
 		switch nn {
 		case 0x07:
+			logrus.Debugf("LD Vx, DT")
+			chip8.dataRegisters[x] = chip8.DT
 		case 0x0A:
+			logrus.Debugf("LD Vx, K")
+			// TODO: block until key is pressed
+			// On the original COSMAC VIP, the key was only registered when it was pressed and then released.
+			// keyDown := getKeyDown()
+			// if keyDown == nil {
+			// 	chip8.PC -= 2
+			// }
+			// chip8.dataRegisters[x] = keyDown
 		case 0x15:
+			logrus.Debugf("LD DT, Vx")
+			chip8.DT = chip8.dataRegisters[x]
 		case 0x18:
+			logrus.Debugf("LD ST, Vx")
+			chip8.ST = chip8.dataRegisters[x]
 		case 0x1E:
+			logrus.Debugf("ADD I, Vx")
+			chip8.I += uint16(chip8.dataRegisters[x])
+			// set overflow if I value exceeds normal adressing range (0xFFF)
+			if chip8.I > 4096 { // TODO: replace with named constant and add toggle to switch this behaviour
+				chip8.dataRegisters[0xF] = 1
+			}
 		case 0x29:
+			logrus.Debugf("LD F, Vx")
+			chip8.I = fontOffset + uint16(chip8.dataRegisters[x])*defaultFontSpriteWidth
 		case 0x33:
+			logrus.Debugf("LD B, Vx")
+			chip8.memory[chip8.I] = chip8.dataRegisters[x] / 100
+			chip8.memory[chip8.I+1] = chip8.dataRegisters[x] % 100 / 10
+			chip8.memory[chip8.I+2] = chip8.dataRegisters[x] % 100 % 10
 		case 0x55:
+			logrus.Debugf("LD [I], Vx")
+			for register := 0; register < int(x); register++ {
+				chip8.memory[chip8.I+uint16(register)] = chip8.dataRegisters[register]
+			}
+			// TODO: CHIP-48 and SUPER-CHIP skip setting the I register
+			chip8.I += uint16(x + 1)
 		case 0x65:
+			logrus.Debugf("LD Vx, [I]")
+			for register := 0; register < int(x); register++ {
+				chip8.dataRegisters[register] = chip8.memory[chip8.I+uint16(register)]
+			}
+			// TODO: CHIP-48 and SUPER-CHIP skip setting the I register
+			chip8.I += uint16(x + 1)
 		}
 	default:
 	}
