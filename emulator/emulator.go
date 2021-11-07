@@ -281,12 +281,6 @@ func (chip8 *Chip8) ReadProgram(filePath string) {
 	buffer := chip8.memory[chip8.PC:]
 	_, err = fileStream.Read(buffer)
 	check(err)
-
-	// fmt.Println(chip8.memory[programMemoryOffset : programMemoryOffset+bytesRead])
-
-	// for _, b := range buffer {
-	// 	fmt.Println(b)
-	// }
 }
 
 func newDisplay(height int, width int) *chip8Display {
@@ -300,7 +294,7 @@ func newDisplay(height int, width int) *chip8Display {
 	}
 }
 
-func Init() *Chip8 {
+func NewEmulator() *Chip8 {
 	chip8 := Chip8{
 		PC:      0x200, // Start of most chip-8 programs
 		display: newDisplay(32, 64),
