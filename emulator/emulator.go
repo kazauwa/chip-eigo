@@ -33,15 +33,15 @@ var font = [...]byte{
 }
 
 type Chip8 struct {
-	memory         [4096]byte
-	stack          [16]uint16
-	data_registers [16]byte
-	PC             uint16 // program counter (i.e. instruction pointer)
-	I              uint16 // index register
-	SP             byte   // stack pointer
-	DT             byte   // delay timer
-	ST             byte   // sound timer
 	screen         [64][32]bool
+	memory        [4096]byte
+	stack         [16]uint16
+	dataRegisters [16]byte
+	PC            uint16 // program counter (i.e. instruction pointer)
+	I             uint16 // index register
+	SP            byte   // stack pointer
+	DT            byte   // delay timer
+	ST            byte   // sound timer
 }
 
 func (chip8 *Chip8) loadFont() {
@@ -113,82 +113,81 @@ func (chip8 *Chip8) decode(rawInstruction uint16) {
 		chip8.PC = nnn
 	case 0x3:
 		logrus.Debugf("SE Vx, byte")
-		if chip8.data_registers[x] == nn {
+		if chip8.dataRegisters[x] == nn {
 			chip8.PC += 2
 		}
 	case 0x4:
 		logrus.Debugf("SNE Vx, byte")
-		if chip8.data_registers[x] != nn {
+		if chip8.dataRegisters[x] != nn {
 			chip8.PC += 2
 		}
 	case 0x5:
 		logrus.Debugf("SE Vx, Vy")
-		if chip8.data_registers[x] == chip8.data_registers[y] {
+		if chip8.dataRegisters[x] == chip8.dataRegisters[y] {
 			chip8.PC += 2
 		}
 	case 0x6:
 		logrus.Debugf("LD Vx, byte")
-		chip8.data_registers[x] = nn
+		chip8.dataRegisters[x] = nn
 	case 0x7:
 		logrus.Debugf("ADD Vx, byte")
-		chip8.data_registers[x] += nn
+		chip8.dataRegisters[x] += nn
 	case 0x8:
 		switch n {
 		case 0x0:
 			logrus.Debugf("LD Vx, Vy")
-			chip8.data_registers[x] = chip8.data_registers[y]
+			chip8.dataRegisters[x] = chip8.dataRegisters[y]
 		case 0x1:
 			logrus.Debugf("OR Vx, Vy")
-			chip8.data_registers[x] = chip8.data_registers[x] | chip8.data_registers[y]
+			chip8.dataRegisters[x] = chip8.dataRegisters[x] | chip8.dataRegisters[y]
 		case 0x2:
 			logrus.Debugf("AND Vx, Vy")
-			chip8.data_registers[x] = chip8.data_registers[x] & chip8.data_registers[y]
+			chip8.dataRegisters[x] = chip8.dataRegisters[x] & chip8.dataRegisters[y]
 		case 0x3:
 			logrus.Debugf("XOR Vx, Vy")
-			chip8.data_registers[x] = chip8.data_registers[x] ^ chip8.data_registers[y]
+			chip8.dataRegisters[x] = chip8.dataRegisters[x] ^ chip8.dataRegisters[y]
 		case 0x4:
 			logrus.Debugf("ADD Vx, Vy")
-			sum := uint16(chip8.data_registers[x]) + uint16(chip8.data_registers[y])
+			sum := uint16(chip8.dataRegisters[x]) + uint16(chip8.dataRegisters[y])
+			chip8.dataRegisters[0xF] = 0
 			if sum > math.MaxUint8 {
-				chip8.data_registers[0xF] = 1
-			} else {
-				chip8.data_registers[0xF] = 0
+				chip8.dataRegisters[0xF] = 1
 			}
-			chip8.data_registers[x] = byte(sum)
+			chip8.dataRegisters[x] = byte(sum)
 		case 0x5:
 			logrus.Debugf("SUB Vx, Vy")
-			if chip8.data_registers[y] > chip8.data_registers[x] {
-				chip8.data_registers[0xF] = 0
-			} else {
-				chip8.data_registers[0xF] = 1
+			chip8.dataRegisters[0xF] = 1
+			if chip8.dataRegisters[y] > chip8.dataRegisters[x] {
+				chip8.dataRegisters[0xF] = 0
 			}
-			chip8.data_registers[x] = chip8.data_registers[x] - chip8.data_registers[y]
+			chip8.dataRegisters[x] = chip8.dataRegisters[x] - chip8.dataRegisters[y]
 		case 0x6:
 			logrus.Debugf("SHR Vx{, Vy}")
-			// TODO: skip if we use CHIP-48 or SUPER-CHIP implementations
+			// TODO: skip assigment if we use CHIP-48 or SUPER-CHIP implementations
 			// if chip8.isChip48 == true || chip8.isSuperChip == true
-			chip8.data_registers[x] = chip8.data_registers[y]
-			chip8.data_registers[0xF] = chip8.data_registers[x] & 0b0000_0001
-			chip8.data_registers[x] >>= 1
+			chip8.dataRegisters[x] = chip8.dataRegisters[y]
+
+			chip8.dataRegisters[0xF] = chip8.dataRegisters[x] & 0b0000_0001
+			chip8.dataRegisters[x] >>= 1
 		case 0x7:
 			logrus.Debugf("SUB Vy, Vx")
-			if chip8.data_registers[x] > chip8.data_registers[y] {
-				chip8.data_registers[0xF] = 0
-			} else {
-				chip8.data_registers[0xF] = 1
+			chip8.dataRegisters[0xF] = 1
+			if chip8.dataRegisters[x] > chip8.dataRegisters[y] {
+				chip8.dataRegisters[0xF] = 0
 			}
-			chip8.data_registers[x] = chip8.data_registers[y] - chip8.data_registers[x]
+			chip8.dataRegisters[x] = chip8.dataRegisters[y] - chip8.dataRegisters[x]
 		case 0xE:
 			logrus.Debugf("SHL Vx{, Vy}")
-			// TODO: skip if we use CHIP-48 or SUPER-CHIP implementations
+			// TODO: skip assigment if we use CHIP-48 or SUPER-CHIP implementations
 			// if chip8.isChip48 == true || chip8.isSuperChip == true
-			chip8.data_registers[x] = chip8.data_registers[y]
-			chip8.data_registers[0xF] = chip8.data_registers[x] & 0b1000_0000
-			chip8.data_registers[x] <<= 1
+			chip8.dataRegisters[x] = chip8.dataRegisters[y]
+
+			chip8.dataRegisters[0xF] = chip8.dataRegisters[x] & 0b1000_0000
+			chip8.dataRegisters[x] <<= 1
 		}
 	case 0x9:
 		logrus.Debugf("SNE Vx, Vy")
-		if chip8.data_registers[x] != chip8.data_registers[y] {
+		if chip8.dataRegisters[x] != chip8.dataRegisters[y] {
 			chip8.PC += 2
 		}
 	default:
