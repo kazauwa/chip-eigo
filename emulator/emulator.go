@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"math"
+	"math/rand"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -32,8 +33,20 @@ var font = [...]byte{
 	0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 }
 
+type chip8Display struct {
+	enableDrawWrap bool
+	screen         [][]byte
+}
+
+func (display *chip8Display) width() int {
+	return len(display.screen)
+}
+
+func (display *chip8Display) height() int {
+	return len(display.screen[0])
+}
+
 type Chip8 struct {
-	screen         [64][32]bool
 	memory        [4096]byte
 	stack         [16]uint16
 	dataRegisters [16]byte
@@ -42,6 +55,7 @@ type Chip8 struct {
 	SP            byte   // stack pointer
 	DT            byte   // delay timer
 	ST            byte   // sound timer
+	display       *chip8Display
 }
 
 func (chip8 *Chip8) loadFont() {
@@ -84,9 +98,9 @@ func (chip8 *Chip8) decode(rawInstruction uint16) {
 		switch nn {
 		case 0xE0:
 			logrus.Debugf("clear screen")
-			for screenRow := range chip8.screen {
-				for pixelPosition := range chip8.screen[screenRow] {
-					chip8.screen[screenRow][pixelPosition] = false
+			for screenRow := range chip8.display.screen {
+				for pixelPosition := range chip8.display.screen[screenRow] {
+					chip8.display.screen[screenRow][pixelPosition] = 0
 				}
 			}
 		case 0xEE:
@@ -190,6 +204,69 @@ func (chip8 *Chip8) decode(rawInstruction uint16) {
 		if chip8.dataRegisters[x] != chip8.dataRegisters[y] {
 			chip8.PC += 2
 		}
+	case 0xA:
+		logrus.Debugf("Set I to nnn")
+		chip8.I = nnn
+	case 0xB:
+		logrus.Debugf("Jump with offset")
+		// TODO: toggle behaviour for CHIP-48 and SUPER-CHIP
+		// chip8.PC = nnn + uint16(chip8.dataRegisters[x])
+		chip8.PC = nnn + uint16(chip8.dataRegisters[0x0]) // original behaviour
+	case 0xC:
+		logrus.Debugf("Generate random number")
+		chip8.dataRegisters[x] = byte(rand.Intn(256)) & nn
+	case 0xD:
+		logrus.Debugf("Display")
+		xCoord := chip8.dataRegisters[x] % byte(chip8.display.width())
+		yCoord := chip8.dataRegisters[y] % byte(chip8.display.height())
+		chip8.dataRegisters[0xF] = 0
+
+		for spriteRowOffset := 0; byte(spriteRowOffset) < n; spriteRowOffset++ {
+			spriteRow := chip8.memory[chip8.I+uint16(spriteRowOffset)]
+			yCoord = (yCoord + byte(spriteRowOffset)) % byte(chip8.display.height())
+			if (int(yCoord)+spriteRowOffset) > chip8.display.height() && !chip8.display.enableDrawWrap {
+				break
+			}
+			for pixel := 0; pixel < math.MaxUint8; pixel++ {
+				xCoord = (xCoord + byte(pixel)) % byte(chip8.display.width())
+				if (int(xCoord)+pixel) > chip8.display.width() && !chip8.display.enableDrawWrap {
+					break
+				}
+				nBitMask := math.Pow(2, float64(pixel))
+				spriteRowNBit := spriteRow & byte(nBitMask)
+				if chip8.dataRegisters[0xF] == 0 && chip8.display.screen[yCoord][xCoord+byte(pixel)] == 1 && spriteRowNBit == 1 {
+					chip8.dataRegisters[0xF] = 1
+				}
+				chip8.display.screen[yCoord][xCoord+byte(pixel)] ^= spriteRowNBit
+			}
+		}
+	case 0xE:
+		switch nn {
+		case 0x9E:
+			logrus.Debugf("SKP Vx")
+			// TODO: Skip next op if key in Vx is pressed down
+			// if isKeyDown(chip8.dataRegisters[x]) {
+			// 	chip8.PC += 2
+			// }
+		case 0xA1:
+			logrus.Debugf("SKNP Vx")
+			// TODO: Skip next op if key in Vx is NOT pressed down
+			// if !isKeyDown(chip8.dataRegisters[x]) {
+			// 	chip8.PC += 2
+			// }
+		}
+	case 0xF:
+		switch nn {
+		case 0x07:
+		case 0x0A:
+		case 0x15:
+		case 0x18:
+		case 0x1E:
+		case 0x29:
+		case 0x33:
+		case 0x55:
+		case 0x65:
+		}
 	default:
 	}
 }
@@ -212,10 +289,22 @@ func (chip8 *Chip8) ReadProgram(filePath string) {
 	// }
 }
 
-func Init() Chip8 {
+func newDisplay(height int, width int) *chip8Display {
+	displayScreen := make([][]byte, height)
+	for row := range displayScreen {
+		displayScreen[row] = make([]byte, width)
+	}
+	return &chip8Display{
+		enableDrawWrap: false,
+		screen:         displayScreen,
+	}
+}
+
+func Init() *Chip8 {
 	chip8 := Chip8{
-		PC: 0x200, // Start of most chip-8 programs
+		PC:      0x200, // Start of most chip-8 programs
+		display: newDisplay(32, 64),
 	}
 	chip8.loadFont()
-	return chip8
+	return &chip8
 }
