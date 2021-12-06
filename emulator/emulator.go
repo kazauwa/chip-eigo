@@ -86,7 +86,7 @@ func (chip8 *Chip8) fetch() uint16 {
 func (chip8 *Chip8) decode(rawInstruction uint16) {
 	op := byte(rawInstruction >> 12)
 	x := byte(rawInstruction >> 8 & 0xF)
-	y := (byte(rawInstruction) & 0xF0)
+	y := (byte(rawInstruction) & 0xF0) >> 4
 	n := (byte(rawInstruction) & 0xF)
 	nn := byte(rawInstruction)
 	nnn := rawInstruction & 0xFFF
