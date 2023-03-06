@@ -1,22 +1,21 @@
 package emulator
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sirupsen/logrus"
 )
-
-func check(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
 
 const (
 	fontOffset             = 0x050
 	defaultFontSpriteWidth = 5
+	initialPC              = 0x200 // Start of most chip-8 programs
+
 )
 
 var font = [...]byte{
@@ -38,16 +37,27 @@ var font = [...]byte{
 	0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 }
 
-type chip8Display struct {
-	enableDrawWrap bool
-	screen         [][]byte
+type Chip8Display struct {
+	wrap   bool
+	screen [][]byte
 }
 
-func (display *chip8Display) width() int {
+func NewDisplay(height int, width int) *Chip8Display {
+	displayScreen := make([][]byte, height)
+	for row := range displayScreen {
+		displayScreen[row] = make([]byte, width)
+	}
+	return &Chip8Display{
+		wrap:   false,
+		screen: displayScreen,
+	}
+}
+
+func (display *Chip8Display) width() int {
 	return len(display.screen)
 }
 
-func (display *chip8Display) height() int {
+func (display *Chip8Display) height() int {
 	return len(display.screen[0])
 }
 
@@ -55,12 +65,21 @@ type Chip8 struct {
 	memory        [4096]byte
 	stack         [16]uint16
 	dataRegisters [16]byte
-	PC            uint16 // program counter (i.e. instruction pointer)
+	PC            uint16 // program counter/instruction pointer
 	I             uint16 // index register
 	SP            byte   // stack pointer
 	DT            byte   // delay timer
 	ST            byte   // sound timer
-	display       *chip8Display
+	display       *Chip8Display
+}
+
+func NewEmulator() *Chip8 {
+	chip8 := &Chip8{
+		PC:      initialPC,
+		display: NewDisplay(32, 64),
+	}
+	chip8.loadFont()
+	return chip8
 }
 
 func (chip8 *Chip8) loadFont() {
@@ -228,12 +247,12 @@ func (chip8 *Chip8) decode(rawInstruction uint16) {
 		for spriteRowOffset := 0; byte(spriteRowOffset) < n; spriteRowOffset++ {
 			spriteRow := chip8.memory[chip8.I+uint16(spriteRowOffset)]
 			yCoord = (yCoord + byte(spriteRowOffset)) % byte(chip8.display.height())
-			if (int(yCoord)+spriteRowOffset) > chip8.display.height() && !chip8.display.enableDrawWrap {
+			if (int(yCoord)+spriteRowOffset) > chip8.display.height() && !chip8.display.wrap {
 				break
 			}
 			for pixel := 0; pixel < math.MaxUint8; pixel++ {
 				xCoord = (xCoord + byte(pixel)) % byte(chip8.display.width())
-				if (int(xCoord)+pixel) > chip8.display.width() && !chip8.display.enableDrawWrap {
+				if (int(xCoord)+pixel) > chip8.display.width() && !chip8.display.wrap {
 					break
 				}
 				nBitMask := math.Pow(2, float64(pixel))
@@ -313,34 +332,63 @@ func (chip8 *Chip8) decode(rawInstruction uint16) {
 	}
 }
 
-func (chip8 *Chip8) execute() {}
+func (chip8 *Chip8) execute() {
+	var builder strings.Builder
+	builder.Grow(chip8.display.height() * chip8.display.width())
+	for _, row := range chip8.display.screen {
+		for _, pixel := range row {
+			if pixel == 0 {
+				builder.WriteString(" ")
+			}
+			if pixel == 1 {
+				builder.WriteString("█") // █
+			}
+		}
+		builder.WriteString("\n")
+	}
+	fmt.Println(builder.String())
+}
 
-func (chip8 *Chip8) ReadProgram(filePath string) {
+func (chip8 *Chip8) ReadProgram(filePath string) error {
 	fileStream, err := os.Open(filePath)
-	check(err)
+	if err != nil {
+		return err
+	}
 	defer fileStream.Close()
 
 	buffer := chip8.memory[chip8.PC:]
 	_, err = fileStream.Read(buffer)
-	check(err)
+	return err
 }
 
-func newDisplay(height int, width int) *chip8Display {
-	displayScreen := make([][]byte, height)
-	for row := range displayScreen {
-		displayScreen[row] = make([]byte, width)
-	}
-	return &chip8Display{
-		enableDrawWrap: false,
-		screen:         displayScreen,
-	}
+func (chip8 Chip8) Init() tea.Cmd {
+	return nil
 }
 
-func NewEmulator() *Chip8 {
-	chip8 := Chip8{
-		PC:      0x200, // Start of most chip-8 programs
-		display: newDisplay(32, 64),
+func (chip8 Chip8) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return chip8, tea.Quit
+		}
 	}
-	chip8.loadFont()
-	return &chip8
+	return chip8, nil
+}
+
+func (chip8 Chip8) View() string {
+	var builder strings.Builder
+	builder.Grow(chip8.display.height() * chip8.display.width())
+	for _, row := range chip8.display.screen {
+		for _, pixel := range row {
+			if pixel == 0 {
+				builder.WriteString(" ")
+			}
+			if pixel == 1 {
+				builder.WriteString("░") // █
+			}
+		}
+		builder.WriteString("\n")
+	}
+	return builder.String()
 }
